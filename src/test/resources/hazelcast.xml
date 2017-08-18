@@ -1,0 +1,9 @@
+<hazelcast xsi:schemaLocation="http://www.hazelcast.com/schema/config http://hazelcast.com/schema/config/hazelcast-config-3.4.xsd"
+           xmlns="http://www.hazelcast.com/schema/config"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+    <map name="testing">
+        <time-to-live-seconds>1</time-to-live-seconds>
+    </map>
+
+</hazelcast>
