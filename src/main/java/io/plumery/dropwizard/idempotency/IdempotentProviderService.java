@@ -20,45 +20,51 @@ public class IdempotentProviderService {
 
     public Response idempotent(String idempotencyKey, IdempotentRequestProcessor request) {
         if (isEmpty(idempotencyKey)) {
+            // -- no idempotency is requested
             return request.process();
         }
-        Response response = getResponse(idempotencyKey);
+
+        Response response = retrieve(idempotencyKey);
         if (response == null) {
             response = request.process();
-            putResponse(idempotencyKey, response);
+
+            if (firstNum(response.getStatus()) == 2) {
+                // -- successful response (2xx)
+                store(idempotencyKey, response);
+            }
         }
         return response;
     }
 
-    private void putResponse(String idempotencyKey, Response response) {
-        // -- successful response (2xx)
-        if (firstNum(response.getStatus()) != 2) {
-            return;
-        }
+    private void store(String idempotencyKey, Response response) {
         ObjectMapper mapper = new ObjectMapper();
         String responseJson;
         try {
             responseJson = mapper.writeValueAsString(new CachedResponse(response.getEntity(), response.getStatus()));
+            cache.put(idempotencyKey, responseJson);
         } catch (JsonProcessingException e) {
-            log.warn("Cannot serialize Response to put into cache: ", e.getMessage());
-            return;
+            log.warn("Cannot serialize response: ", e);
         }
-        cache.put(idempotencyKey, responseJson);
     }
 
-    private Response getResponse(String idempotencyKey) {
-        ObjectMapper mapper = new ObjectMapper();
+    private Response retrieve(String idempotencyKey) {
+        Response answer = null;
         String obj = cache.get(idempotencyKey);
-        if (obj == null) {
-            return null;
+
+        if (obj != null) {
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                CachedResponse cachedResponse = mapper.readValue(obj, CachedResponse.class);
+                answer = Response
+                        .status(cachedResponse.getStatus())
+                        .entity(cachedResponse.getEntity())
+                        .build();
+            } catch (IOException e) {
+                log.warn("Cannot deserialize response: ", e);
+            }
         }
-        try {
-            CachedResponse cachedResponse = mapper.readValue(obj, CachedResponse.class);
-            return Response.status(cachedResponse.getStatus()).entity(cachedResponse.getEntity()).build();
-        } catch (IOException e) {
-            log.warn("Cannot deserialize Response from cache: ", e.getMessage());
-        }
-        return null;
+
+        return answer;
     }
 
     private int firstNum(int x) {
